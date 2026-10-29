@@ -4,7 +4,14 @@ import pytest
 from httpx import AsyncClient
 
 from tests.conftest import FakeClock
-from tests.helpers import auth_headers, create_task, make_admin, register_account
+from tests.helpers import (
+    auth_headers,
+    create_task,
+    make_admin,
+    move_task_to_done,
+    register_account,
+    transition_task,
+)
 
 
 async def _create_in_progress(client: AsyncClient, headers: dict[str, str], **overrides) -> dict:
@@ -90,8 +97,21 @@ async def test_review_to_done_succeeds(client: AsyncClient, clock: FakeClock) ->
         ("Backlog", "Backlog"),
         ("In Progress", "Done"),
         ("In Progress", "Backlog"),
+        ("In Progress", "In Progress"),
         ("Review", "Cancelled"),
         ("Review", "In Progress"),
+        ("Review", "Backlog"),
+        ("Review", "Review"),
+        ("Done", "Backlog"),
+        ("Done", "In Progress"),
+        ("Done", "Review"),
+        ("Done", "Done"),
+        ("Done", "Cancelled"),
+        ("Cancelled", "Backlog"),
+        ("Cancelled", "In Progress"),
+        ("Cancelled", "Review"),
+        ("Cancelled", "Done"),
+        ("Cancelled", "Cancelled"),
     ],
 )
 async def test_invalid_status_transitions(
@@ -118,13 +138,24 @@ async def test_invalid_status_transitions(
             assignee_id=bob["id"],
             due_date=clock.today_value.isoformat(),
         )
-    else:
+    elif setup_status == "Review":
         task = await _create_in_review(
             client,
             headers,
             assignee_id=bob["id"],
             due_date=clock.today_value.isoformat(),
         )
+    elif setup_status == "Done":
+        task = await create_task(
+            client,
+            headers,
+            assignee_id=bob["id"],
+            due_date=clock.today_value.isoformat(),
+        )
+        task = await move_task_to_done(client, headers, task["id"])
+    else:
+        task = await create_task(client, headers)
+        task = await transition_task(client, headers, task["id"], "Cancelled")
 
     response = await client.patch(
         f"/api/v1/tasks/{task['id']}/status",

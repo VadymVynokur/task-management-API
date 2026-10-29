@@ -1,0 +1,5 @@
+* text=auto
+
+# Git hooks are executed by a POSIX shell; CRLF would break the shebang.
+.githooks/* text eol=lf
+*.sh text eol=lf

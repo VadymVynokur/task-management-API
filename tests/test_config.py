@@ -14,6 +14,16 @@ def test_settings_validate_worker_interval() -> None:
         Settings(worker_interval_seconds=0)
 
 
+def test_settings_reject_short_jwt_secret() -> None:
+    with pytest.raises(ValidationError):
+        Settings(jwt_secret_key="too-short")
+
+
+def test_settings_reject_default_page_size_above_maximum() -> None:
+    with pytest.raises(ValidationError):
+        Settings(page_size_default=101, page_size_max=100)
+
+
 def test_settings_defaults_match_approved_decisions() -> None:
     settings = Settings()
 
