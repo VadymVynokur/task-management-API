@@ -5,6 +5,7 @@ Models are imported here so Alembic can discover all tables through
 """
 
 from task_management_api.models.refresh_token import RefreshToken
+from task_management_api.models.task import Task
 from task_management_api.models.user import User
 
-__all__ = ["RefreshToken", "User"]
+__all__ = ["RefreshToken", "Task", "User"]
