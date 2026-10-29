@@ -1,7 +1,7 @@
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,7 +20,10 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+asyncpg://task_user:task_password@localhost:5432/task_management"
     )
-    jwt_secret_key: str = "dev-only-secret-change-me-please-32chars"
+    jwt_secret_key: str = Field(
+        default="dev-only-secret-change-me-please-32chars",
+        min_length=32,
+    )
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = Field(default=15, ge=1)
     refresh_token_expire_days: int = Field(default=7, ge=1)
@@ -40,12 +43,11 @@ class Settings(BaseSettings):
             raise ValueError(f"Unknown timezone: {value}") from exc
         return value
 
-    @field_validator("page_size_max")
-    @classmethod
-    def validate_page_size_max(cls, value: int) -> int:
-        if value < 1:
-            raise ValueError("page_size_max must be at least 1")
-        return value
+    @model_validator(mode="after")
+    def validate_page_size_bounds(self) -> "Settings":
+        if self.page_size_default > self.page_size_max:
+            raise ValueError("page_size_default must not exceed page_size_max")
+        return self
 
     @property
     def tzinfo(self) -> ZoneInfo:

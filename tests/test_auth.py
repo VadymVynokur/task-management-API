@@ -1,7 +1,11 @@
 from datetime import timedelta
 
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from task_management_api.core.time import ensure_utc
+from task_management_api.models.refresh_token import RefreshToken
 from tests.conftest import FakeClock
 from tests.helpers import DEFAULT_PASSWORD, auth_headers, login_account, register_account
 
@@ -59,6 +63,21 @@ async def test_login_returns_access_and_refresh_tokens(client: AsyncClient) -> N
     assert tokens["expires_in"] == 15 * 60
     assert tokens["access_token"]
     assert tokens["refresh_token"]
+
+
+async def test_refresh_token_records_creation_time(
+    client: AsyncClient,
+    clock: FakeClock,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    await register_account(client)
+    await login_account(client)
+
+    async with session_factory() as session:
+        stored_token = await session.scalar(select(RefreshToken))
+
+    assert stored_token is not None
+    assert ensure_utc(stored_token.created_at) == clock.now()
 
 
 async def test_login_rejects_invalid_credentials(client: AsyncClient) -> None:

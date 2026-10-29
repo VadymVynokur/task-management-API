@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from task_management_api.api.router import api_router
@@ -39,9 +40,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(
+        _: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
+        # Never echo request input: validation errors can otherwise expose
+        # passwords, tokens, or other sensitive values in the response.
+        errors = [
+            {key: value for key, value in error.items() if key not in {"input", "ctx"}}
+            for error in exc.errors()
+        ]
+        return JSONResponse(status_code=422, content={"detail": errors})
+
     @app.exception_handler(Exception)
     async def unhandled_error_handler(_: Request, exc: Exception) -> JSONResponse:
-        logger.exception("Unhandled application error", exc_info=exc)
+        logger.error("Unhandled application error (%s)", type(exc).__name__)
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     app.include_router(api_router)

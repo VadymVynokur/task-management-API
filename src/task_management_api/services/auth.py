@@ -77,6 +77,7 @@ def _issue_token_pair(
             user_id=user.id,
             token_hash=hash_token(refresh_token),
             expires_at=expires_at,
+            created_at=now,
         )
     )
     return TokenResponse(

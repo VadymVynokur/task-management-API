@@ -10,7 +10,9 @@ from tests.helpers import (
     auth_headers,
     create_task,
     make_admin,
+    move_task_to_done,
     register_account,
+    transition_task,
 )
 
 
@@ -208,6 +210,51 @@ async def test_update_task_fields(client: AsyncClient, clock: FakeClock) -> None
     assert updated["assignee_id"] == bob["id"]
     assert updated["due_date"] is None
     assert updated["updated_at"] != original_updated_at
+
+
+@pytest.mark.parametrize(
+    ("setup_status", "expected_status"),
+    [
+        ("Backlog", 200),
+        ("In Progress", 200),
+        ("Review", 200),
+        ("Done", 409),
+        ("Cancelled", 409),
+    ],
+)
+async def test_update_behavior_per_status(
+    client: AsyncClient,
+    clock: FakeClock,
+    setup_status: str,
+    expected_status: int,
+) -> None:
+    bob = await register_account(client, "bob")
+    await register_account(client, "alice")
+    headers = await auth_headers(client, "alice")
+    task = await create_task(
+        client,
+        headers,
+        assignee_id=bob["id"],
+        due_date=clock.today_value.isoformat(),
+    )
+
+    if setup_status == "In Progress":
+        task = await transition_task(client, headers, task["id"], "In Progress")
+    elif setup_status == "Review":
+        await transition_task(client, headers, task["id"], "In Progress")
+        task = await transition_task(client, headers, task["id"], "Review")
+    elif setup_status == "Done":
+        task = await move_task_to_done(client, headers, task["id"])
+    elif setup_status == "Cancelled":
+        task = await transition_task(client, headers, task["id"], "Cancelled")
+
+    response = await client.patch(
+        f"/api/v1/tasks/{task['id']}",
+        headers=headers,
+        json={"title": "Updated title"},
+    )
+
+    assert response.status_code == expected_status
 
 
 async def test_update_rejects_terminal_tasks(client: AsyncClient, clock: FakeClock) -> None:

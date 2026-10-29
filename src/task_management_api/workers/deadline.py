@@ -44,11 +44,15 @@ async def run_check(
     settings: Settings,
     clock: Clock,
 ) -> int:
+    logger.info("Deadline check started")
     try:
         async with session_factory() as session:
             cancelled = await cancel_overdue_tasks(session, settings, clock)
-    except Exception:
-        logger.exception("Deadline check failed; the next scheduled check will retry")
+    except Exception as exc:
+        logger.error(
+            "Deadline check failed (%s); the next scheduled check will retry",
+            type(exc).__name__,
+        )
         return 0
 
     logger.info("Deadline check completed: cancelled %s overdue task(s)", cancelled)

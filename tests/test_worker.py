@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import timedelta
 
@@ -9,7 +10,7 @@ from task_management_api.core.config import Settings
 from task_management_api.enums import TaskStatus
 from task_management_api.models.comment import Comment
 from task_management_api.models.task import Task
-from task_management_api.workers.deadline import cancel_overdue_tasks, run_worker
+from task_management_api.workers.deadline import cancel_overdue_tasks, run_check, run_worker
 from tests.conftest import FakeClock
 from tests.helpers import (
     auth_headers,
@@ -182,6 +183,24 @@ async def test_worker_runs_startup_check_then_sleeps_for_interval(
     stored = await _stored_task(session_factory, task["id"])
     assert stored.status == TaskStatus.cancelled
     assert sleeps == [settings.worker_interval_seconds]
+
+
+async def test_worker_logging_omits_sensitive_error_details(
+    settings: Settings,
+    caplog,
+) -> None:
+    class FailingFactory:
+        def __call__(self):
+            raise RuntimeError("database password=secret")
+
+    with caplog.at_level(logging.INFO, logger="task_management_api.workers.deadline"):
+        count = await run_check(FailingFactory(), settings, FakeClock())
+
+    assert count == 0
+    assert "Deadline check started" in caplog.text
+    assert "Deadline check failed" in caplog.text
+    assert "password=secret" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 async def test_worker_continues_after_transient_error(

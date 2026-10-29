@@ -16,7 +16,7 @@ The system also contains a separate periodic worker that automatically moves eli
 
 - User registration and username/password authentication.
 - JWT access and refresh tokens, including refresh-token rotation.
-- Role-based authorization, with the exact role names and permission matrix still to be approved.
+- Role-based authorization with the approved `user`/`admin` permission matrix (DEC-01).
 - Task CRUD with soft deletion.
 - Task status-transition validation.
 - Task comments.
@@ -110,7 +110,7 @@ The migration orchestration mechanism is defined in DEC-11: a dedicated Compose 
 
 ## 4. Domain model
 
-Names below describe the logical domain. Exact identifier types, SQL field types, and some storage details remain subject to the decisions in Section 2.1.
+Names below describe the logical domain. Identifier types, SQL field types, and storage details follow the approved decisions in Section 2.1.
 
 ### 4.1 User
 
@@ -118,8 +118,8 @@ A user record must support:
 
 - A unique username used for login.
 - A securely hashed password; plaintext passwords must never be stored.
-- One or more role assignments according to the approved role model.
-- Creation timestamp, if retained by the final schema decision.
+- Exactly one role assignment: `user` or `admin`, assigned by the server according to DEC-01.
+- Creation timestamp.
 
 Email is not required by the approved authentication flow. Email verification and password reset are out of scope.
 
@@ -132,9 +132,9 @@ Each task must represent at least the following fields:
 | `id` | Unique UUID identifier. |
 | `title` | Required task title, 1–200 characters. |
 | `description` | Optional/nullable task description up to 10,000 characters. |
-| `status` | One of `Backlog`, `In Progress`, `Review`, `Done`, `Cancelled`. New tasks are expected to begin in `Backlog`; confirm if this must be a hard rule before implementation. |
+| `status` | One of `Backlog`, `In Progress`, `Review`, `Done`, `Cancelled`. New tasks always start in `Backlog`; clients cannot set the initial status. |
 | `priority` | `High`, `Medium`, or `Low`; default is `Medium`. |
-| `assignee_id` | Reference to the assigned executor; may be empty unless the approved `Done` rule requires an assignee. |
+| `assignee_id` | Reference to the assigned executor; may be empty, but a task must have an assignee to transition to `Done` (DEC-04). |
 | `created_by_id` | Reference to the user who created the task; assigned by the server from the authenticated principal, never trusted from an arbitrary client-supplied author field. |
 | `due_date` | Optional calendar date without a time component. |
 | `created_at` | Server-generated creation timestamp. |
@@ -180,7 +180,7 @@ The only approved priorities are `High`, `Medium`, and `Low`. The default is `Me
 - **FR-AUTH-002:** Authentication must use username and password.
 - **FR-AUTH-003:** Passwords must be stored using a suitable password-hashing algorithm. Plaintext and reversible plaintext-equivalent storage are prohibited.
 - **FR-AUTH-004:** Successful login must issue a JWT access token and a refresh token.
-- **FR-AUTH-005:** Refresh-token use must rotate the refresh token. Token lifetime, revocation storage, replay handling, and logout behavior must be specified under DEC-06 before implementation.
+- **FR-AUTH-005:** Refresh-token use must rotate the refresh token. Token lifetime, revocation storage, replay handling, and logout behavior follow DEC-06.
 - **FR-AUTH-006:** Protected endpoints must reject requests without valid authentication, except public registration and login/refresh routes as defined by the final route contract.
 - **FR-AUTH-007:** Password reset and email verification must not be implemented unless separately approved.
 - **FR-AUTH-008:** Registration assigns the `user` role. The role is never taken from client input.
@@ -251,8 +251,8 @@ The only approved priorities are `High`, `Medium`, and `Low`. The default is `Me
 - **FR-TASK-015:** Deletion must be soft deletion; the task's record and related data must not be physically removed by the normal delete endpoint.
 - **FR-TASK-016:** A task must not be deleted while it is in `In Progress` or `Review`.
 - **FR-TASK-017:** Soft deletion is allowed only when the task is in `Backlog`, `Done`, or `Cancelled`.
-- **FR-TASK-018:** The soft-delete operation must persist a deletion marker and must not reset the task's creation metadata. Whether `updated_at` changes on soft deletion must be explicitly defined in implementation and tested; recommended behavior is to update it, but this is not yet an approved decision.
-- **FR-TASK-019:** How soft-deleted tasks appear in list, detail, overdue, and statistics results is unresolved under DEC-05/DEC-13. Do not silently choose whether they remain visible or counted.
+- **FR-TASK-018:** The soft-delete operation must persist a deletion marker, update `updated_at`, and must not reset the task's creation metadata (DEC-13).
+- **FR-TASK-019:** Soft-deleted tasks are excluded from list, detail, overdue, and statistics results (DEC-05).
 - **FR-TASK-020:** A soft-deleted task must not be eligible for automatic overdue cancellation.
 
 ### FR-COMMENT — Comments
@@ -276,7 +276,7 @@ The only approved priorities are `High`, `Medium`, and `Low`. The default is `Me
 - **FR-LIST-009:** The API must support page-number pagination with `page` and `page_size` parameters.
 - **FR-LIST-010:** Pagination uses `page` default 1 and `page_size` default 20 with a maximum of 100.
 - **FR-LIST-011:** Sorting must be deterministic across pages. A stable tie-breaker must be selected under DEC-15 before implementation.
-- **FR-LIST-012:** List endpoints must enforce the final authorization and soft-delete visibility policy. The approved global task-visibility rule is that any authenticated user can view all tasks, subject to unresolved soft-delete handling.
+- **FR-LIST-012:** List endpoints must enforce the approved authorization and soft-delete visibility policy. Any authenticated user can view all non-deleted tasks; soft-deleted tasks are excluded (DEC-05).
 
 ### FR-OVERDUE — Overdue tasks endpoint
 

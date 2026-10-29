@@ -7,6 +7,7 @@ def test_valid_commit_message() -> None:
 
 def test_merge_commit_is_ignored() -> None:
     assert validate_message("Merge branch 'develop' into feature") == []
+    assert validate_message("merge: task/07-docs-and-hardening into develop") == []
 
 
 def test_invalid_type_is_rejected() -> None:

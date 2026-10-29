@@ -36,7 +36,9 @@ def validate_message(message: str) -> list[str]:
         return ["commit message is empty"]
 
     subject = lines[0].strip()
-    if subject.startswith("Merge "):
+    # Merge commits do not represent a change of their own; accept both Git's
+    # default subject and the project's lowercase merge convention.
+    if subject.startswith("Merge ") or subject.lower().startswith("merge:"):
         return []
 
     match = SUBJECT_RE.match(subject)
