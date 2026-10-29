@@ -28,4 +28,4 @@ def test_alembic_upgrade_head_creates_version_table(tmp_path: Path) -> None:
             row[0]
             for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
-    assert "alembic_version" in tables
+    assert {"alembic_version", "users", "refresh_tokens"} <= tables
