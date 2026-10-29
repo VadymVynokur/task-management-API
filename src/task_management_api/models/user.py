@@ -24,6 +24,7 @@ class User(Base):
             length=10,
             create_constraint=True,
             validate_strings=True,
+            values_callable=lambda enum: [member.value for member in enum],
         ),
         default=UserRole.user,
         nullable=False,
