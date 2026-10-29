@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+asyncpg://task_user:task_password@localhost:5432/task_management"
     )
-    jwt_secret_key: str = "dev-only-secret-change-me"
+    jwt_secret_key: str = "dev-only-secret-change-me-please-32chars"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = Field(default=15, ge=1)
     refresh_token_expire_days: int = Field(default=7, ge=1)

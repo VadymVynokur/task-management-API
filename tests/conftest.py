@@ -33,12 +33,15 @@ class FakeClock:
     def set_today(self, value: date) -> None:
         self.today_value = value
 
+    def set_now(self, value: datetime) -> None:
+        self.now_value = value
+
 
 @pytest.fixture
 def settings() -> Settings:
     return Settings(
         database_url="sqlite+aiosqlite:///:memory:",
-        jwt_secret_key="test-secret-key",
+        jwt_secret_key="test-secret-key-that-is-long-enough-123",
         access_token_expire_minutes=15,
         refresh_token_expire_days=7,
         docs_enabled=True,
