@@ -1,7 +1,8 @@
 import math
 import uuid
+from datetime import date
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from task_management_api.core.clock import Clock
@@ -12,12 +13,18 @@ from task_management_api.enums import (
     ALLOWED_TRANSITIONS,
     MAX_ACTIVE_TASKS,
     PRIORITY_RANK,
+    TaskPriority,
     TaskStatus,
     UserRole,
 )
 from task_management_api.models.task import Task
 from task_management_api.models.user import User
-from task_management_api.schemas.task import TaskCreate, TaskUpdate
+from task_management_api.schemas.task import (
+    SortOrder,
+    TaskCreate,
+    TaskSortField,
+    TaskUpdate,
+)
 
 PRIORITY_RANK_EXPRESSION = case(
     PRIORITY_RANK,
@@ -213,27 +220,140 @@ async def soft_delete_task(
     await session.commit()
 
 
-async def list_tasks(
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _list_conditions(
+    *,
+    q: str | None,
+    statuses: list[TaskStatus] | None,
+    priorities: list[TaskPriority] | None,
+    assignee_id: uuid.UUID | None,
+    due_from: date | None,
+    due_to: date | None,
+) -> list:
+    conditions = [Task.deleted_at.is_(None)]
+    if q:
+        pattern = f"%{_escape_like(q)}%"
+        conditions.append(
+            or_(
+                Task.title.ilike(pattern, escape="\\"),
+                Task.description.ilike(pattern, escape="\\"),
+            )
+        )
+    if statuses:
+        conditions.append(Task.status.in_(statuses))
+    if priorities:
+        conditions.append(Task.priority.in_(priorities))
+    if assignee_id is not None:
+        conditions.append(Task.assignee_id == assignee_id)
+    if due_from is not None:
+        conditions.append(Task.due_date >= due_from)
+    if due_to is not None:
+        conditions.append(Task.due_date <= due_to)
+    return conditions
+
+
+def _list_order_by(
+    sort_by: TaskSortField | None,
+    sort_order: SortOrder,
+) -> list:
+    descending = sort_order == SortOrder.desc
+    if sort_by is None:
+        return [
+            PRIORITY_RANK_EXPRESSION.asc(),
+            Task.due_date.asc().nulls_last(),
+            Task.id.asc(),
+        ]
+    if sort_by == TaskSortField.created_at:
+        primary = Task.created_at.desc() if descending else Task.created_at.asc()
+    elif sort_by == TaskSortField.due_date:
+        primary = Task.due_date.desc() if descending else Task.due_date.asc()
+        primary = primary.nulls_last()
+    else:
+        primary = PRIORITY_RANK_EXPRESSION.desc() if descending else PRIORITY_RANK_EXPRESSION.asc()
+    return [primary, Task.id.asc()]
+
+
+async def _paginated_tasks(
     session: AsyncSession,
+    conditions: list,
+    order_by: list,
     *,
     page: int,
     page_size: int,
 ) -> tuple[list[Task], int, int]:
-    conditions = [Task.deleted_at.is_(None)]
     total = await session.scalar(select(func.count(Task.id)).where(*conditions))
     total = int(total or 0)
-
     statement = (
         select(Task)
         .where(*conditions)
-        .order_by(
-            PRIORITY_RANK_EXPRESSION.asc(),
-            Task.due_date.asc().nulls_last(),
-            Task.id.asc(),
-        )
+        .order_by(*order_by)
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
     items = list((await session.scalars(statement)).all())
     pages = math.ceil(total / page_size) if total else 0
     return items, total, pages
+
+
+async def list_tasks(
+    session: AsyncSession,
+    *,
+    page: int,
+    page_size: int,
+    q: str | None = None,
+    statuses: list[TaskStatus] | None = None,
+    priorities: list[TaskPriority] | None = None,
+    assignee_id: uuid.UUID | None = None,
+    due_from: date | None = None,
+    due_to: date | None = None,
+    sort_by: TaskSortField | None = None,
+    sort_order: SortOrder = SortOrder.asc,
+) -> tuple[list[Task], int, int]:
+    conditions = _list_conditions(
+        q=q,
+        statuses=statuses,
+        priorities=priorities,
+        assignee_id=assignee_id,
+        due_from=due_from,
+        due_to=due_to,
+    )
+    order_by = _list_order_by(sort_by, sort_order)
+    return await _paginated_tasks(
+        session,
+        conditions,
+        order_by,
+        page=page,
+        page_size=page_size,
+    )
+
+
+async def overdue_tasks(
+    session: AsyncSession,
+    settings: Settings,
+    clock: Clock,
+    *,
+    page: int,
+    page_size: int,
+) -> tuple[list[Task], int, int]:
+    today = _today(settings, clock)
+    conditions = [
+        Task.deleted_at.is_(None),
+        Task.due_date.is_not(None),
+        Task.due_date < today,
+        Task.status.in_(ACTIVE_STATUSES),
+    ]
+    order_by = [
+        PRIORITY_RANK_EXPRESSION.asc(),
+        Task.due_date.asc().nulls_last(),
+        Task.id.asc(),
+    ]
+    return await _paginated_tasks(
+        session,
+        conditions,
+        order_by,
+        page=page,
+        page_size=page_size,
+    )
