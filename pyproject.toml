@@ -1,0 +1,55 @@
+[project]
+name = "task-management-api"
+version = "0.1.0"
+description = "Task management REST API built with FastAPI and SQLAlchemy Async"
+readme = "README.md"
+authors = [
+    { name = "Vadym Vynokur", email = "king.krollie@gmail.com" }
+]
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "alembic>=1.14.0",
+    "asyncpg>=0.30.0",
+    "fastapi>=0.115.0",
+    "pwdlib[argon2]>=0.2.1",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "pyjwt>=2.10.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "tzdata>=2024.1",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.20.0",
+    "httpx>=0.28.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.25.0",
+    "ruff>=0.9.0",
+]
+
+[project.scripts]
+task-management-api = "task_management_api.main:run"
+
+[build-system]
+requires = ["uv_build>=0.13.3,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = [".venv", "migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
